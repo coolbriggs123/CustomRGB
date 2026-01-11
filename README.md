@@ -1,4 +1,5 @@
 # ARES
+# ![ARES](https://i.imgur.com/nI4BqnW.png)
 
 A modern, Python-based RGB lighting controller application that integrates with OpenRGB to provide advanced lighting effects and profile management. Built with PyQt6 for a sleek, frameless user interface.
 
