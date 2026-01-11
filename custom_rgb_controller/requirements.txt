@@ -1,0 +1,5 @@
+openrgb-python
+PyQt6
+numpy
+qtawesome
+soundcard

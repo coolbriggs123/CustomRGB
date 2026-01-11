@@ -1,0 +1,11 @@
+{
+    "brightness": 1.0,
+    "identify_device": -1,
+    "fps_limit": 60,
+    "minimize_to_tray": true,
+    "start_minimized": false,
+    "auto_connect": true,
+    "openrgb_host": "127.0.0.1",
+    "openrgb_port": 6742,
+    "theme": "Dark"
+}
