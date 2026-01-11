@@ -28,7 +28,7 @@ A modern, Python-based RGB lighting controller application that integrates with 
 
 ## 📦 Installation
 
-1. Download from the [release page](https://github.com/coolbriggs123/CustomRGB/releases)\
+1. Download from the [release page](https://github.com/coolbriggs123/CustomRGB/releases)
 2. Extract zip with your choice of extractor.
 3. Run the .exe in a dedicated folder.
 4. Success!
