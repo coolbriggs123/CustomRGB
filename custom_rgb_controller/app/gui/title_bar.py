@@ -1,8 +1,9 @@
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QLabel, QPushButton, 
                              QApplication, QFrame)
 from PyQt6.QtCore import Qt, QPoint
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QPixmap
 import qtawesome as qta
+import os
 
 class IconButton(QPushButton):
     def __init__(self, icon_name, hover_color=None, normal_color='#aaaaaa', parent=None):
@@ -40,10 +41,18 @@ class CustomTitleBar(QWidget):
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(15, 0, 0, 0) # Zero right margin for buttons to hit edge
-        layout.setSpacing(0)
+        layout.setSpacing(10)
+
+        # Icon
+        icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'ARESico.png'))
+        if os.path.exists(icon_path):
+            self.icon_label = QLabel()
+            pixmap = QPixmap(icon_path)
+            self.icon_label.setPixmap(pixmap.scaled(24, 24, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            layout.addWidget(self.icon_label)
 
         # Title
-        self.title_label = QLabel("Custom RGB Controller")
+        self.title_label = QLabel("ARES")
         self.title_label.setObjectName("TitleLabel")
         layout.addWidget(self.title_label)
 

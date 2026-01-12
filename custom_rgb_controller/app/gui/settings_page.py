@@ -7,11 +7,12 @@ from PyQt6.QtCore import Qt, pyqtSignal
 class SettingsPage(QWidget):
     theme_changed = pyqtSignal(str) # Emits theme name ("Dark" or "Light")
 
-    def __init__(self, backend, global_settings, save_callback=None):
+    def __init__(self, backend, global_settings, save_callback=None, startup_callback=None):
         super().__init__()
         self.backend = backend
         self.global_settings = global_settings
         self.save_callback = save_callback
+        self.startup_callback = startup_callback
         self.init_ui()
 
     def init_ui(self):
@@ -53,6 +54,7 @@ class SettingsPage(QWidget):
         
         self.chk_start_boot = QCheckBox("Start on System Boot")
         self.chk_start_boot.setToolTip("Launch the application automatically when Windows starts.")
+        self.chk_start_boot.setChecked(self.global_settings.get('start_on_boot', False))
         
         self.chk_start_minimized = QCheckBox("Start Minimized")
         self.chk_start_minimized.setToolTip("Start the application hidden in the system tray.")
@@ -63,6 +65,7 @@ class SettingsPage(QWidget):
         self.chk_tray_minimize.setChecked(self.global_settings.get('minimize_to_tray', True))
         
         # Connect signals
+        self.chk_start_boot.stateChanged.connect(self.on_start_boot_changed)
         self.chk_start_minimized.stateChanged.connect(lambda s: self.update_setting('start_minimized', s == 2))
         self.chk_tray_minimize.stateChanged.connect(lambda s: self.update_setting('minimize_to_tray', s == 2))
         
@@ -163,23 +166,30 @@ class SettingsPage(QWidget):
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        title = QLabel("Custom RGB Controller")
-        title.setStyleSheet("font-size: 20px; font-weight: bold;")
+        title = QLabel("ARES")
+        title.setObjectName("AboutTitle")
+        title.setStyleSheet("font-size: 32px; font-weight: bold;")
         
-        version = QLabel("Version 0.2.0")
-        version.setStyleSheet("color: #888; margin-bottom: 20px;")
+        version = QLabel("v1.0.0")
+        version.setStyleSheet("font-size: 14px; color: #888; margin-bottom: 20px;")
         
-        desc = QLabel("A modern, custom interface for OpenRGB.\nCreate layers, manage profiles, and control your devices.")
+        desc = QLabel("Advanced RGB Effect System")
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        desc.setStyleSheet("margin-bottom: 20px;")
+        desc.setStyleSheet("font-size: 16px; margin-bottom: 30px;")
+        
+        author = QLabel("Created by Coolbriggs")
+        author.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        author.setStyleSheet("font-size: 18px; font-weight: bold; color: #e0e0e0; margin-bottom: 10px;")
         
         credits = QLabel("Powered by OpenRGB SDK\nBuilt with PyQt6")
         credits.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        credits.setStyleSheet("color: #666;")
+        credits.setStyleSheet("color: #666; font-size: 12px;")
         
+        layout.addStretch()
         layout.addWidget(title)
         layout.addWidget(version)
         layout.addWidget(desc)
+        layout.addWidget(author)
         layout.addWidget(credits)
         layout.addStretch()
         
@@ -201,6 +211,12 @@ class SettingsPage(QWidget):
         self.global_settings[key] = value
         if self.save_callback:
             self.save_callback()
+
+    def on_start_boot_changed(self, state):
+        enabled = (state == 2)
+        self.update_setting('start_on_boot', enabled)
+        if self.startup_callback:
+            self.startup_callback(enabled)
 
     def on_theme_changed(self, index):
         theme_name = self.theme_combo.currentText()

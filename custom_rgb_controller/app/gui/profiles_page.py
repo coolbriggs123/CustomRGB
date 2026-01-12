@@ -1,15 +1,18 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, 
-                             QPushButton, QLabel, QMessageBox, QInputDialog)
-from PyQt6.QtCore import Qt, pyqtSignal
+                             QPushButton, QLabel, QMessageBox, QInputDialog, QListWidgetItem)
+from PyQt6.QtCore import Qt, pyqtSignal, QSize
 import json
+import qtawesome as qta
 from app.core.profiles import ProfileManager
 
 class ProfilesPage(QWidget):
     profile_loaded = pyqtSignal(dict) # Emits the profile data
 
-    def __init__(self):
+    def __init__(self, global_settings, save_callback):
         super().__init__()
         self.manager = ProfileManager()
+        self.global_settings = global_settings
+        self.save_callback = save_callback
         self.init_ui()
 
     def init_ui(self):
@@ -49,15 +52,72 @@ class ProfilesPage(QWidget):
     def refresh_list(self):
         self.list_widget.clear()
         profiles = self.manager.list_profiles()
-        for p in profiles:
-            self.list_widget.addItem(p)
+        fav_profile = self.global_settings.get('favorite_profile')
+
+        for p_name in profiles:
+            item = QListWidgetItem(self.list_widget)
+            item.setSizeHint(QSize(0, 50))
+            
+            # Custom Widget
+            widget = QWidget()
+            w_layout = QHBoxLayout(widget)
+            w_layout.setContentsMargins(10, 0, 10, 0)
+            
+            # Name
+            name_lbl = QLabel(p_name)
+            name_lbl.setStyleSheet("font-size: 14px;")
+            w_layout.addWidget(name_lbl)
+            
+            w_layout.addStretch()
+            
+            # Star Button
+            star_btn = QPushButton()
+            star_btn.setFixedSize(30, 30)
+            star_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            
+            is_fav = (p_name == fav_profile)
+            
+            # Use "fa5s.star" for both but change color to indicate state
+            # This avoids the "Invalid font prefix fa5r" error if the regular font isn't loaded
+            icon_name = "fa5s.star"
+            color = "#ffc107" if is_fav else "#444444"
+            
+            star_btn.setIcon(qta.icon(icon_name, color=color))
+            star_btn.setStyleSheet("background: transparent; border: none;")
+            star_btn.clicked.connect(lambda checked, n=p_name: self.toggle_favorite(n))
+            
+            w_layout.addWidget(star_btn)
+            
+            self.list_widget.setItemWidget(item, widget)
+
+    def toggle_favorite(self, name):
+        current_fav = self.global_settings.get('favorite_profile')
+        if current_fav == name:
+            # Unfavorite if clicking the same one
+            self.global_settings['favorite_profile'] = None
+        else:
+            self.global_settings['favorite_profile'] = name
+            
+        if self.save_callback:
+            self.save_callback()
+            
+        self.refresh_list()
 
     def load_selected(self):
         item = self.list_widget.currentItem()
         if not item:
             return
             
-        name = item.text()
+        # Retrieve name from the custom widget
+        widget = self.list_widget.itemWidget(item)
+        if widget:
+            # The first child layout widget is the label
+            name_lbl = widget.findChild(QLabel)
+            if name_lbl:
+                name = name_lbl.text()
+                self._load_profile_by_name(name)
+
+    def _load_profile_by_name(self, name):
         try:
             data = self.manager.load_profile(name)
             if data:
@@ -71,7 +131,15 @@ class ProfilesPage(QWidget):
         if not item:
             return
             
-        name = item.text()
+        widget = self.list_widget.itemWidget(item)
+        if not widget:
+            return
+            
+        name_lbl = widget.findChild(QLabel)
+        if not name_lbl:
+            return
+            
+        name = name_lbl.text()
         confirm = QMessageBox.question(self, "Confirm Delete", 
                                      f"Are you sure you want to delete '{name}'?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)

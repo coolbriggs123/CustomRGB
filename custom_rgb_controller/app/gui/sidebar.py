@@ -1,13 +1,36 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QPushButton, QLabel, 
                              QFrame, QButtonGroup, QSpacerItem, QSizePolicy, QHBoxLayout)
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QPropertyAnimation, QEasingCurve
 import qtawesome as qta
+
+class SidebarButton(QPushButton):
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        self.anim = QPropertyAnimation(self, b"iconSize")
+        self.anim.setDuration(150)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        
+    def enterEvent(self, event):
+        self.anim.stop()
+        self.anim.setStartValue(self.iconSize())
+        self.anim.setEndValue(QSize(24, 24))
+        self.anim.start()
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        self.anim.stop()
+        self.anim.setStartValue(self.iconSize())
+        self.anim.setEndValue(QSize(20, 20))
+        self.anim.start()
+        super().leaveEvent(event)
 
 class Sidebar(QFrame):
     page_changed = pyqtSignal(int) # Emits index of page to switch to
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.setObjectName("Sidebar")
         self.setFixedWidth(250)
         self.nav_buttons = [] # Store buttons to update icons later
@@ -18,24 +41,9 @@ class Sidebar(QFrame):
         layout.setContentsMargins(0, 20, 0, 20)
         layout.setSpacing(8)
 
-        # App Logo/Title
-        logo_layout = QHBoxLayout()
-        logo_layout.setContentsMargins(20, 0, 20, 20)
-        
-        self.logo_icon = QLabel()
-        self.logo_icon.setPixmap(qta.icon("fa5s.palette", color="#007acc").pixmap(28, 28))
-        logo_layout.addWidget(self.logo_icon)
-        
-        self.logo_text = QLabel("RGB CONTROL")
-        self.logo_text.setStyleSheet("font-size: 12pt; font-weight: 700; color: #e0e0e0; letter-spacing: 1px; font-family: 'Segoe UI';")
-        logo_layout.addWidget(self.logo_text)
-        logo_layout.addStretch()
-        
-        layout.addLayout(logo_layout)
-
         self.btn_group = QButtonGroup(self)
         self.btn_group.setExclusive(True)
-        self.btn_group.idClicked.connect(self.on_btn_clicked)
+        self.btn_group.buttonClicked.connect(self.on_btn_clicked)
 
         # Home
         self.add_nav_btn("Home", 0, "fa5s.home", checked=True)
@@ -53,7 +61,7 @@ class Sidebar(QFrame):
         layout.addStretch()
 
         # Footer / Version info could go here
-        version = QLabel("v0.2.0")
+        version = QLabel("v1.0.0")
         version.setStyleSheet("color: #666; padding-left: 20px; font-size: 8pt;")
         layout.addWidget(version)
 
@@ -68,11 +76,11 @@ class Sidebar(QFrame):
         self.layout().addWidget(label)
 
     def add_nav_btn(self, text, index, icon_name=None, checked=False):
-        btn = QPushButton(text)
+        btn = SidebarButton(text)
         btn.setCheckable(True)
         btn.setChecked(checked)
         btn.setObjectName("NavButton")
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Cursor set in class init
         
         if icon_name:
             # Store icon name for updates
@@ -103,17 +111,22 @@ class Sidebar(QFrame):
                 self.update_btn_icon(btn, icon_name, theme_name)
 
         # Update Branding
-        if theme_name == "Light":
-            text_color = "#333333"
-            # Keep accent color or make it match the theme's text if desired, 
-            # but usually logo branding stays consistent or goes dark.
-            icon_color = "#007acc" 
-        else:
-            text_color = "#e0e0e0"
-            icon_color = "#007acc"
+        if hasattr(self, 'logo_text') and hasattr(self, 'logo_icon'):
+            if theme_name == "Light":
+                text_color = "#333333"
+                icon_color = "#007acc" 
+            else:
+                text_color = "#e0e0e0"
+                icon_color = "#007acc"
 
-        self.logo_text.setStyleSheet(f"font-size: 12pt; font-weight: 700; color: {text_color}; letter-spacing: 1px; font-family: 'Segoe UI';")
-        self.logo_icon.setPixmap(qta.icon("fa5s.palette", color=icon_color).pixmap(28, 28))
+            self.logo_text.setStyleSheet(f"font-size: 12pt; font-weight: 700; color: {text_color}; letter-spacing: 1px; font-family: 'Segoe UI';")
+            self.logo_icon.setPixmap(qta.icon("fa5s.palette", color=icon_color).pixmap(28, 28))
 
-    def on_btn_clicked(self, index):
+    def on_btn_clicked(self, btn):
+        index = self.btn_group.id(btn)
         self.page_changed.emit(index)
+    
+    def set_active_index(self, index):
+        button = self.btn_group.button(index)
+        if button:
+            button.setChecked(True)

@@ -3,12 +3,15 @@ import threading
 import json
 import os
 import time
+import ctypes
+if sys.platform == 'win32':
+    import winreg
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QPushButton, QLabel, QStackedWidget,
                              QFrame, QSlider, QListWidget, QGroupBox, QMessageBox,
                              QGraphicsDropShadowEffect, QSystemTrayIcon, QMenu)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QKeyEvent, QColor, QAction, QCloseEvent
+from PyQt6.QtGui import QKeyEvent, QColor, QAction, QCloseEvent, QIcon
 import qtawesome as qta
 
 try:
@@ -25,7 +28,9 @@ from app.engine.renderer import render_loop
 from app.gui.devices_page import DevicesPage
 from app.gui.profiles_page import ProfilesPage
 from app.gui.settings_page import SettingsPage
+from app.gui.animated_stacked_widget import AnimatedStackedWidget
 from app.path_utils import get_app_root
+from app.core.profiles import ProfileManager
 
 class NullBackend:
     def push_frame(self, frame):
@@ -34,8 +39,13 @@ class NullBackend:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Custom RGB Controller")
+        self.setWindowTitle("ARES")
         self.resize(1280, 850)
+        
+        # Set Window Icon
+        icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'ARESico.png'))
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
         
         # Frameless and Transparent
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
@@ -68,6 +78,64 @@ class MainWindow(QMainWindow):
         # Apply initial theme
         self.on_theme_changed(self.global_settings.get('theme', 'Dark'))
 
+        # Load Favorite Profile
+        fav_profile = self.global_settings.get('favorite_profile')
+        if fav_profile:
+            manager = ProfileManager()
+            data = manager.load_profile(fav_profile)
+            if data:
+                # Load data but don't necessarily switch page immediately if we want to start on Home
+                # But typically users want to see their profile. 
+                # Let's use the standard loader which switches page.
+                self.on_profile_loaded(data)
+
+    def check_startup_registry(self):
+        if sys.platform != 'win32':
+            return False
+        
+        app_name = "ARES"
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ)
+            try:
+                winreg.QueryValueEx(key, app_name)
+                return True
+            except FileNotFoundError:
+                return False
+            finally:
+                winreg.CloseKey(key)
+        except Exception:
+            return False
+
+    def set_startup_registry(self, enable):
+        if sys.platform != 'win32':
+            return
+            
+        app_name = "ARES"
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+        
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_ALL_ACCESS)
+            
+            if enable:
+                if getattr(sys, 'frozen', False):
+                    exe_path = sys.executable
+                    winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, f'"{exe_path}"')
+                else:
+                    # In dev mode, we might want to skip or handle differently
+                    # For now, only enabling for frozen app to avoid issues
+                    print("Registry update skipped: App is not frozen")
+            else:
+                try:
+                    winreg.DeleteValue(key, app_name)
+                except FileNotFoundError:
+                    pass
+                    
+            winreg.CloseKey(key)
+        except Exception as e:
+            print(f"Registry error: {e}")
+
     def load_settings(self):
         self.settings_file = os.path.join(get_app_root(), 'settings.json')
         default_settings = {
@@ -92,6 +160,9 @@ class MainWindow(QMainWindow):
                 self.global_settings = default_settings
         else:
             self.global_settings = default_settings
+
+        # Sync start_on_boot with actual registry state
+        self.global_settings['start_on_boot'] = self.check_startup_registry()
 
     def save_settings(self):
         try:
@@ -185,7 +256,7 @@ class MainWindow(QMainWindow):
         body_layout.addWidget(self.sidebar)
         
         # Content Stack
-        self.stack = QStackedWidget()
+        self.stack = AnimatedStackedWidget()
         body_layout.addWidget(self.stack)
         
         container_layout.addWidget(body_widget)
@@ -198,7 +269,7 @@ class MainWindow(QMainWindow):
         # Home Page (Placeholder)
         home_page = QWidget()
         home_layout = QVBoxLayout(home_page)
-        lbl = QLabel("Welcome to Custom RGB Controller")
+        lbl = QLabel("Welcome to ARES")
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet("font-size: 18pt; color: #666;")
         home_layout.addWidget(lbl)
@@ -210,7 +281,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.creator_page) # 1
         
         # Profiles Page
-        self.profiles_page = ProfilesPage()
+        self.profiles_page = ProfilesPage(self.global_settings, self.save_settings)
         self.profiles_page.profile_loaded.connect(self.on_profile_loaded)
         self.stack.addWidget(self.profiles_page) # 2
         
@@ -219,7 +290,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.devices_page) # 3
         
         # Settings Page
-        self.settings_page = SettingsPage(self.backend, self.global_settings, self.save_settings)
+        self.settings_page = SettingsPage(self.backend, self.global_settings, self.save_settings, self.set_startup_registry)
         self.settings_page.theme_changed.connect(self.on_theme_changed)
         self.stack.addWidget(self.settings_page) # 4
         
@@ -235,6 +306,7 @@ class MainWindow(QMainWindow):
     def on_profile_loaded(self, data):
         self.creator_page.load_data(data)
         self.switch_page(1) # Switch to Creator tab to show loaded effect
+        self.sidebar.set_active_index(1)
 
     def on_profile_saved(self):
         # Refresh the profiles page list if it exists
@@ -242,14 +314,20 @@ class MainWindow(QMainWindow):
             self.profiles_page.refresh_list()
 
     def switch_page(self, index):
-        self.stack.setCurrentIndex(index)
+        self.stack.slideInIdx(index)
 
     def init_tray(self):
         self.tray_icon = QSystemTrayIcon(self)
         
-        # Use a generic icon if app icon isn't set, or qtawesome
-        icon = qta.icon('fa5s.lightbulb', color='#007acc')
+        # Try to load custom icon, fallback to qtawesome
+        icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'ARESico.png'))
+        if os.path.exists(icon_path):
+            icon = QIcon(icon_path)
+        else:
+            icon = qta.icon('fa5s.lightbulb', color='#007acc')
+            
         self.tray_icon.setIcon(icon)
+        self.tray_icon.setToolTip("ARES")
         
         # Tray Menu
         tray_menu = QMenu()
@@ -294,7 +372,7 @@ class MainWindow(QMainWindow):
             event.ignore()
             self.hide()
             self.tray_icon.showMessage(
-                "Custom RGB Controller",
+                "ARES",
                 "Application minimized to tray. Right-click the icon to quit.",
                 QSystemTrayIcon.MessageIcon.Information,
                 2000
@@ -303,9 +381,19 @@ class MainWindow(QMainWindow):
             self.quit_app()
 
 def run_app():
+    # Set AppUserModelID for Windows Taskbar Icon
+    if sys.platform == 'win32':
+        myappid = 'ARES' # arbitrary string
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False) # Important for tray only mode
     
+    # Set Application Icon (Taskbar)
+    icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'ARESico.png'))
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+
     window = MainWindow()
     
     # Check start minimized setting

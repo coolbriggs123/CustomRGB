@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, 
                              QPushButton, QLabel, QComboBox, QFormLayout, 
                              QSpinBox, QDoubleSpinBox, QGroupBox, QLineEdit, QColorDialog,
-                             QFileDialog, QMessageBox, QInputDialog, QMenu)
+                             QFileDialog, QMessageBox, QInputDialog, QMenu, QGraphicsOpacityEffect)
 from PyQt6.QtGui import QAction
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QColor
 import json
 import time
@@ -98,6 +98,23 @@ class CreatorWidget(QWidget):
         layout.addWidget(self.prop_group, 1)
         
         self.refresh_layer_list()
+
+    def animate_properties_fade_in(self):
+        # Create effect specifically for animation
+        self.prop_opacity = QGraphicsOpacityEffect(self.prop_group)
+        self.prop_group.setGraphicsEffect(self.prop_opacity)
+        
+        self.anim = QPropertyAnimation(self.prop_opacity, b"opacity")
+        self.anim.setDuration(300)
+        self.anim.setStartValue(0.0)
+        self.anim.setEndValue(1.0)
+        self.anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        self.anim.finished.connect(self.on_fade_in_finished)
+        self.anim.start()
+
+    def on_fade_in_finished(self):
+        # Remove effect to prevent rendering issues (invisible on hover)
+        self.prop_group.setGraphicsEffect(None)
 
     def update_theme(self, theme_name):
         self.visualizer.update_theme(theme_name)
@@ -260,6 +277,8 @@ class CreatorWidget(QWidget):
                 
             if widget:
                 self.prop_layout.addRow(label, widget)
+        
+        self.animate_properties_fade_in()
                 
     def clear_properties(self):
         while self.prop_layout.count():
